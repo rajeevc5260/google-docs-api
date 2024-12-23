@@ -1,6 +1,7 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
+import cors from 'cors'; 
 
 dotenv.config();
 
@@ -10,6 +11,9 @@ const PORT = 3000;
 // In-memory map for storing user tokens
 // Format: { userId: { accessToken, refreshToken, expiresAt } }
 const authMap = new Map();
+
+// Enable CORS for all routes
+app.use(cors());
 
 // Middleware
 app.use(express.json());
