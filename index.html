@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Doc Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        #doc-container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            background: #f9f9f9;
+            max-width: 800px;
+            margin: auto;
+        }
+
+        .paragraph {
+            margin-bottom: 1rem;
+            white-space: pre-wrap;
+        }
+
+        ul, ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        img {
+            max-width: 100%;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Google Document Editor</h1>
+    <div id="doc-container" contenteditable="true"></div>
+    <button id="save-doc">Save Changes</button>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:3000'; // Replace with your API base URL
+        const DOCUMENT_ID = '155FIoSa6hpvrRJHNKz825TIo-LTQMqfkggxAE0xYvsI'; // Replace with the actual document ID
+        const USER_ID = '12345'; // Replace with the actual user ID
+
+        // Fetch the document data from the API
+        async function fetchDocument() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/google-doc?documentId=${DOCUMENT_ID}&userId=${USER_ID}`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch document');
+                }
+                const data = await response.json();
+                renderDocument(data.data); // Render the fetched document
+            } catch (error) {
+                console.error('Error fetching document:', error);
+                alert('Error fetching document. Check console for details.');
+            }
+        }
+
+        // Render the document content
+        function renderDocument(data) {
+            const container = document.getElementById('doc-container');
+            container.innerHTML = ''; // Clear previous content
+
+            // Set the title (if needed)
+            const titleElement = document.createElement('h2');
+            titleElement.textContent = data.title;
+            container.appendChild(titleElement);
+
+            // Render the content
+            data.body.content.forEach((contentItem) => {
+                if (contentItem.paragraph) {
+                    const paragraph = document.createElement('div');
+                    paragraph.className = 'paragraph';
+
+                    // Check if the paragraph is part of a list
+                    if (contentItem.paragraph.bullet) {
+                        const listType = contentItem.paragraph.bullet.listId ? 'ol' : 'ul';
+                        let listContainer = container.querySelector(listType);
+                        if (!listContainer) {
+                            listContainer = document.createElement(listType);
+                            container.appendChild(listContainer);
+                        }
+
+                        const listItem = document.createElement('li');
+                        contentItem.paragraph.elements.forEach((element) => {
+                            if (element.textRun) {
+                                const span = document.createElement('span');
+                                span.textContent = element.textRun.content;
+                                applyTextStyle(span, element.textRun.textStyle);
+                                listItem.appendChild(span);
+                            }
+                        });
+                        listContainer.appendChild(listItem);
+                    } else {
+                        // Render normal text with styles
+                        contentItem.paragraph.elements.forEach((element) => {
+                            if (element.textRun) {
+                                const span = document.createElement('span');
+                                span.textContent = element.textRun.content;
+                                applyTextStyle(span, element.textRun.textStyle);
+                                paragraph.appendChild(span);
+                            }
+                        });
+                        container.appendChild(paragraph);
+                    }
+                }
+
+                // Render images
+                if (contentItem.inlineObjects) {
+                    contentItem.inlineObjects.forEach((inlineObject) => {
+                        const img = document.createElement('img');
+                        img.src = inlineObject.inlineObjectProperties.embeddedObject.imageProperties.contentUri;
+                        container.appendChild(img);
+                    });
+                }
+            });
+        }
+
+        // Apply text styles
+        function applyTextStyle(element, textStyle) {
+            if (!textStyle) return;
+            if (textStyle.bold) element.style.fontWeight = 'bold';
+            if (textStyle.italic) element.style.fontStyle = 'italic';
+            if (textStyle.underline) element.style.textDecoration = 'underline';
+            if (textStyle.foregroundColor?.color?.rgbColor) {
+                const color = textStyle.foregroundColor.color.rgbColor;
+                element.style.color = `rgb(${Math.round(color.red * 255 || 0)}, ${Math.round(color.green * 255 || 0)}, ${Math.round(color.blue * 255 || 0)})`;
+            }
+            if (textStyle.backgroundColor?.color?.rgbColor) {
+                const bgColor = textStyle.backgroundColor.color.rgbColor;
+                element.style.backgroundColor = `rgb(${Math.round(bgColor.red * 255 || 0)}, ${Math.round(bgColor.green * 255 || 0)}, ${Math.round(bgColor.blue * 255 || 0)})`;
+            }
+        }
+
+        // Save the updated document content back to the server
+        async function saveDocument() {
+            const paragraphs = Array.from(document.querySelectorAll('#doc-container .paragraph'));
+
+            const requests = paragraphs.map((paragraph, index) => {
+                return {
+                    insertText: {
+                        location: {
+                            index: index + 1
+                        },
+                        text: paragraph.textContent
+                    }
+                };
+            });
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/google-doc/batchUpdate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        documentId: DOCUMENT_ID,
+                        userId: USER_ID,
+                        requests,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to save document');
+                }
+
+                const data = await response.json();
+                alert('Document updated successfully!');
+                console.log('Updated Document Response:', data);
+            } catch (error) {
+                console.error('Error saving document:', error);
+                alert('Error saving document. Check console for details.');
+            }
+        }
+
+        // Initialize the editor
+        document.getElementById('save-doc').addEventListener('click', saveDocument);
+
+        // Fetch the document on page load
+        fetchDocument();
+    </script>
+</body>
+</html>

@@ -177,6 +177,77 @@ app.get('/google-doc', async (req, res) => {
     }
 });
 
+
+// API to batch update a Google Doc
+app.post('/google-doc/batchUpdate', async (req, res) => {
+    const { documentId, userId, requests } = req.body;
+
+    if (!documentId || !userId || !requests || !Array.isArray(requests)) {
+        return res.status(400).json({
+            error: 'Missing documentId, userId, or invalid requests array',
+        });
+    }
+
+    const userTokens = authMap.get(userId);
+
+    if (!userTokens) {
+        return res.status(401).json({
+            error: 'User not authenticated. Authenticate first.',
+        });
+    }
+
+    let { accessToken, refreshToken, expiresAt } = userTokens;
+
+    try {
+        // Check if the access token has expired
+        if (new Date() > expiresAt) {
+            console.log('Access token expired, refreshing...');
+            const refreshedData = await refreshAccessToken(refreshToken);
+
+            accessToken = refreshedData.access_token;
+            expiresAt = new Date(Date.now() + refreshedData.expires_in * 1000);
+
+            // Update tokens in authMap
+            authMap.set(userId, { accessToken, refreshToken, expiresAt });
+
+            console.log('Access token refreshed:', accessToken);
+        }
+
+        // Use the access token to send the batch update request
+        const response = await fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ requests }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error performing batch update:', errorData);
+            return res.status(response.status).json({
+                error: errorData.error.message,
+                details: errorData,
+            });
+        }
+
+        const updateResponse = await response.json();
+
+        return res.status(200).json({
+            message: 'Batch update performed successfully',
+            data: updateResponse,
+        });
+    } catch (error) {
+        console.error('Error:', error.message);
+        return res.status(500).json({
+            error: 'Internal server error',
+            details: error.message,
+        });
+    }
+});
+
+
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
